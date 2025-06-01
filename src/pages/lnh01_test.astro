@@ -1,134 +1,116 @@
 ---
-// invoice.astro – Astro page using Whisper.js for universal speech-to-text
-// Deployable on Netlify, Vercel, or any static host
+// Astro page script
+import { onMount } from 'astro/client';
 ---
-<!DOCTYPE html>
+
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Voice Invoice Generator</title>
+    <title>Voice Invoice (Whisper.js)</title>
     <style>
-      body {
-        font-family: Arial, sans-serif;
-        padding: 20px;
-      }
-      h1 {
-        font-size: 24px;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 20px;
-      }
-      th, td {
-        border: 1px solid #ccc;
-        padding: 8px;
-        text-align: left;
-      }
-      th {
-        background-color: #f0f0f0;
-      }
-      button {
-        padding: 10px 15px;
-        font-size: 16px;
-        margin-top: 10px;
-      }
-      #transcript {
-        margin-top: 15px;
-        font-style: italic;
-        color: #333;
-        background-color: #f8f8f8;
-        padding: 10px;
-        border-left: 4px solid #0077cc;
-      }
+      body { font-family: Arial, sans-serif; padding: 20px; }
+      h1 { font-size: 24px; }
+      button { padding: 10px 15px; font-size: 16px; margin-top: 10px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+      th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+      th { background: #f0f0f0; }
+      #status { margin-top: 12px; font-style: italic; color: #555; }
     </style>
+    <script type="module" src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0/dist/transformers.min.js"></script>
   </head>
   <body>
-    <h1>Invoice Generator</h1>
-    <p>Click the button and say each item like: <i>"Drywall installation 300"</i></p>
-    <button onclick="startRecognition()">+ New Item (Voice)</button>
-
-    <div id="transcript" style="display:none;"></div>
+    <h1>Invoice Generator (Whisper.js)</h1>
+    <p>Click the button and say something like <i>“Drywall installation 300”</i></p>
+    <button id="voiceBtn">+ New Item (Voice)</button>
+    <div id="status"></div>
 
     <table id="invoiceTable">
       <thead>
-        <tr>
-          <th>#</th>
-          <th>Description</th>
-          <th>Amount ($)</th>
-        </tr>
+        <tr><th>#</th><th>Description</th><th>Amount&nbsp;($)</th></tr>
       </thead>
       <tbody></tbody>
       <tfoot>
-        <tr>
-          <td colspan="2"><strong>Total</strong></td>
-          <td id="total">$0</td>
-        </tr>
+        <tr><td colspan="2"><strong>Total</strong></td><td id="total">$0.00</td></tr>
       </tfoot>
     </table>
 
-    <script>
+    <script type="module">
+      let transcriberPromise;
+      async function getTranscriber() {
+        if (!transcriberPromise) {
+          document.getElementById('status').textContent =
+            'Downloading Whisper model (~50 MB)… please wait';
+          transcriberPromise = window.transformers.pipeline(
+            'automatic-speech-recognition',
+            'Xenova/whisper-tiny.en'
+          );
+        }
+        return transcriberPromise;
+      }
+
       let itemCount = 0;
       let total = 0;
 
-      function startRecognition() {
-        if (!("webkitSpeechRecognition" in window)) {
-          alert("Speech recognition not supported. Please use Google Chrome.");
+      document.getElementById('voiceBtn').addEventListener('click', async () => {
+        const status = document.getElementById('status');
+        status.textContent = 'Requesting microphone…';
+
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (err) {
+          status.textContent = 'Microphone denied: ' + err.message;
           return;
         }
 
-        const recognition = new webkitSpeechRecognition();
-        recognition.lang = "en-US";
-        recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
+        status.textContent = 'Recording… speak now (5 s)';
+        const chunks = [];
+        const recorder = new MediaRecorder(stream);
+        recorder.ondataavailable = e => chunks.push(e.data);
+        recorder.start();
+        setTimeout(() => recorder.stop(), 5000);
 
-        recognition.start();
+        recorder.onstop = async () => {
+          status.textContent = 'Transcribing…';
+          const blob = new Blob(chunks, { type: recorder.mimeType });
+          const url = URL.createObjectURL(blob);
 
-        recognition.onresult = function (event) {
-          const transcript = event.results[0][0].transcript;
+          try {
+            const transcriber = await getTranscriber();
+            const result = await transcriber(url);
+            const transcript = result.text.trim();
 
-          // Show the transcribed text in a div
-          const transcriptDiv = document.getElementById("transcript");
-          transcriptDiv.textContent = "You said: " + transcript;
-          transcriptDiv.style.display = "block";
+            alert('You said: ' + transcript);
+            status.textContent = 'Heard: "' + transcript + '"';
 
-          const { description, amount } = parseItem(transcript);
-          if (description && amount) {
-            addItem(description, amount);
-          } else {
-            transcriptDiv.textContent += " (could not parse – try again)";
+            const parsed = parseItem(transcript);
+            if (parsed) {
+              addItem(parsed.description, parsed.amount);
+              status.textContent += ' → item added';
+            } else {
+              status.textContent += ' (could not parse – try again)';
+            }
+          } catch (e) {
+            status.textContent = 'Transcription error: ' + e.message;
+          } finally {
+            URL.revokeObjectURL(url);
+            stream.getTracks().forEach(t => t.stop());
           }
         };
-
-        recognition.onerror = function (event) {
-          document.getElementById("transcript").textContent =
-            "Error occurred: " + event.error;
-          document.getElementById("transcript").style.display = "block";
-        };
-      }
+      });
 
       function parseItem(text) {
-        const match = text.match(/(.+?)\s(\d+(\.\d{1,2})?)$/);
-        if (!match) return {};
-        return {
-          description: match[1].trim(),
-          amount: parseFloat(match[2]),
-        };
+        const m = text.match(/(.+?)\s(\d+(?:\.\d{1,2})?)$/);
+        return m ? { description: m[1].trim(), amount: parseFloat(m[2]) } : null;
       }
 
       function addItem(description, amount) {
         itemCount++;
-        const table = document
-          .getElementById("invoiceTable")
-          .querySelector("tbody");
-        const row = table.insertRow();
-        row.innerHTML = `
-          <td>${itemCount}</td>
-          <td>${description}</td>
-          <td>$${amount.toFixed(2)}</td>
-        `;
         total += amount;
-        document.getElementById("total").innerText = `$${total.toFixed(2)}`;
+        const row = document.createElement('tr');
+        row.innerHTML = `<td>${itemCount}</td><td>${description}</td><td>$${amount.toFixed(2)}</td>`;
+        document.querySelector('#invoiceTable tbody').appendChild(row);
+        document.getElementById('total').textContent = '$' + total.toFixed(2);
       }
     </script>
   </body>
