@@ -403,7 +403,7 @@
                 </div>
 
                 <div class="voice-controls">
-                    <button class="btn btn-primary" id="newItemBtn" onclick="startVoiceRecognition()">
+                    <button class="btn btn-primary" id="newItemBtn">
                         🎤 <span id="btnText">New Item (Voice)</span>
                     </button>
                 </div>
@@ -506,6 +506,9 @@
                 this.invoiceTableBody = document.getElementById('invoiceTableBody');
                 this.invoiceTotal = document.getElementById('invoiceTotal');
                 this.browserWarning = document.getElementById('browserWarning');
+                
+                // Add event listener for the button
+                this.newItemBtn.addEventListener('click', () => this.startVoiceRecognition());
             }
 
             checkBrowserSupport() {
@@ -721,11 +724,6 @@
 
         // Initialize the application
         const invoiceGenerator = new VoiceInvoiceGenerator();
-
-        // Global function for voice recognition (called by button)
-        function startVoiceRecognition() {
-            invoiceGenerator.startVoiceRecognition();
-        }
 
         // Print function
         function printInvoice() {
