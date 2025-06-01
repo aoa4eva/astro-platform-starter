@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Voice Invoice Generator</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    h1 { font-size: 24px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f0f0f0; }
+    button { padding: 10px 15px; font-size: 16px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Invoice Generator</h1>
+  <p>Click the button and say each item like: <i>"Drywall installation 300"</i></p>
+  <button onclick="startRecognition()">+ New Item (Voice)</button>
+
+  <table id="invoiceTable">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Description</th>
+        <th>Amount ($)</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+    <tfoot>
+      <tr>
+        <td colspan="2"><strong>Total</strong></td>
+        <td id="total">$0</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <script>
+    let itemCount = 0;
+    let total = 0;
+
+    function startRecognition() {
+      if (!('webkitSpeechRecognition' in window)) {
+        alert('Speech recognition not supported. Please use Google Chrome.');
+        return;
+      }
+
+      const recognition = new webkitSpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.start();
+      recognition.onresult = function(event) {
+        const transcript = event.results[0][0].transcript;
+        const { description, amount } = parseItem(transcript);
+        if (description && amount) {
+          addItem(description, amount);
+        } else {
+          alert("Couldn't understand. Please say something like: 'floor tiles 500'");
+        }
+      };
+
+      recognition.onerror = function(event) {
+        alert('Error occurred: ' + event.error);
+      };
+    }
+
+    function parseItem(text) {
+      
+      const match = text.match(/(.+?)\s(\d+(\.\d{1,2})?)$/);
+      if (!match) return {};
+      return {
+        description: match[1].trim(),
+        amount: parseFloat(match[2])
+      };
+    }
+
+    function addItem(description, amount) {
+      itemCount++;
+      const table = document.getElementById("invoiceTable").querySelector("tbody");
+      const row = table.insertRow();
+      row.innerHTML = `
+        <td>${itemCount}</td>
+        <td>${description}</td>
+        <td>$${amount.toFixed(2)}</td>
+      `;
+      total += amount;
+      document.getElementById("total").innerText = `$${total.toFixed(2)}`;
+    }
+  </script>
+</body>
+</html>
