@@ -1,11 +1,13 @@
 ---
-// No special server-side logic needed
+// invoice.astro – Astro page using Whisper.js for universal speech-to-text
+// Deployable on Netlify, Vercel, or any static host
 ---
 
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Voice Invoice Generator</title>
+    <title>Voice Invoice – Whisper.js Demo</title>
     <style>
       body {
         font-family: Arial, sans-serif;
@@ -32,88 +34,140 @@
         padding: 10px 15px;
         font-size: 16px;
         margin-top: 10px;
+        cursor: pointer;
+      }
+      #status {
+        margin-top: 10px;
+        font-style: italic;
+        color: #555;
       }
     </style>
   </head>
   <body>
-    <h1>Invoice Generator</h1>
+    <h1>Invoice Generator (Whisper.js)</h1>
     <p>
-      Click the button and say each item like: <i>"Drywall installation 300"</i>
+      Click the button and <strong>speak</strong> each item like:
+      <i>"Drywall installation&nbsp;300"</i>
     </p>
-    <button onclick="startRecognition()">+ New Item (Voice)</button>
+    <button id="recordBtn">+ New Item (Voice)</button>
+    <div id="status"></div>
 
     <table id="invoiceTable">
       <thead>
         <tr>
           <th>#</th>
           <th>Description</th>
-          <th>Amount ($)</th>
+          <th>Amount&nbsp;($)</th>
         </tr>
       </thead>
       <tbody></tbody>
       <tfoot>
         <tr>
           <td colspan="2"><strong>Total</strong></td>
-          <td id="total">$0</td>
+          <td id="total">$0.00</td>
         </tr>
       </tfoot>
     </table>
 
-    <script>
+    <!--
+      Whisper.js (Transformers.js) – browser‑side Whisper inference
+      Model: Xenova/whisper‑tiny.en (~50 MB); auto‑downloaded & cached
+      NOTE: First load can take ~30 s depending on connection/device.
+    -->
+    <script type="module" is:inline>
+      import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0/dist/transformers.min.js";
+
+      // ────────────────────────────────────────────────────────────
+      // Lazy‑load Whisper model once, then reuse for every utterance
+      // ────────────────────────────────────────────────────────────
+      let transcriberPromise;
+      async function loadTranscriber() {
+        if (!transcriberPromise) {
+          document.getElementById("status").textContent =
+            "Downloading speech model (~50 MB)… please wait.";
+          transcriberPromise = pipeline(
+            "automatic-speech-recognition",
+            "Xenova/whisper-tiny.en"
+          );
+        }
+        return transcriberPromise;
+      }
+
+      // Global invoice state
       let itemCount = 0;
       let total = 0;
 
-      function startRecognition() {
-        if (!("webkitSpeechRecognition" in window)) {
-          alert("Speech recognition not supported. Please use Google Chrome.");
+      document.getElementById("recordBtn").addEventListener("click", async () => {
+        const statusEl = document.getElementById("status");
+
+        // ── 1. Ask for microphone access ─────────────────────────
+        statusEl.textContent = "Requesting microphone…";
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (err) {
+          alert("Microphone access denied or unavailable: " + err.message);
+          statusEl.textContent = "";
           return;
         }
 
-        const recognition = new webkitSpeechRecognition();
-        recognition.lang = "en-US";
-        recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
+        // ── 2. Record a short utterance (5 s) ────────────────────
+        const recorder = new MediaRecorder(stream);
+        const chunks = [];
+        recorder.ondataavailable = (e) => chunks.push(e.data);
+        recorder.start();
+        statusEl.textContent = "Recording… speak now";
+        setTimeout(() => recorder.stop(), 5000); // auto‑stop after 5 s
 
-        recognition.start();
-        recognition.onresult = function (event) {
-          const transcript = event.results[0][0].transcript;
-          const { description, amount } = parseItem(transcript);
-          if (description && amount) {
-            addItem(description, amount);
-          } else {
-            alert(
-              "Couldn't understand. Please say something like: 'floor tiles 500'"
-            );
+        // ── 3. When recording stops, run Whisper.js ──────────────
+        recorder.onstop = async () => {
+          statusEl.textContent = "Transcribing…";
+          const blob = new Blob(chunks, { type: recorder.mimeType });
+          const url = URL.createObjectURL(blob);
+
+          try {
+            const transcriber = await loadTranscriber();
+            const result = await transcriber(url);
+            const transcript = result.text.trim();
+            statusEl.textContent = `Heard: "${transcript}"`;
+
+            const { description, amount } = parseItem(transcript);
+            if (description && amount) {
+              addItem(description, amount);
+              statusEl.textContent += " → Item added!";
+            } else {
+              alert(
+                "Couldn't parse the phrase. Please say something like 'paint 250'."
+              );
+              statusEl.textContent = "";
+            }
+          } catch (err) {
+            alert("Transcription error: " + err.message);
+            statusEl.textContent = "";
           }
-        };
 
-        recognition.onerror = function (event) {
-          alert("Error occurred: " + event.error);
+          URL.revokeObjectURL(url);
+          stream.getTracks().forEach((t) => t.stop());
         };
-      }
+      });
 
+      // ── Helper: parse "description price" ─────────────────────
       function parseItem(text) {
         const match = text.match(/(.+?)\s(\d+(\.\d{1,2})?)$/);
         if (!match) return {};
-        return {
-          description: match[1].trim(),
-          amount: parseFloat(match[2]),
-        };
+        return { description: match[1].trim(), amount: parseFloat(match[2]) };
       }
 
+      // ── Helper: add row & update total ─────────────────────────
       function addItem(description, amount) {
         itemCount++;
-        const table = document
-          .getElementById("invoiceTable")
-          .querySelector("tbody");
-        const row = table.insertRow();
-        row.innerHTML = `
-        <td>${itemCount}</td>
-        <td>${description}</td>
-        <td>$${amount.toFixed(2)}</td>
-      `;
+        const row = document.createElement("tr");
+        row.innerHTML = `<td>${itemCount}</td><td>${description}</td><td>$${amount.toFixed(
+          2
+        )}</td>`;
+        document.querySelector("#invoiceTable tbody").appendChild(row);
         total += amount;
-        document.getElementById("total").innerText = `$${total.toFixed(2)}`;
+        document.getElementById("total").textContent = `$${total.toFixed(2)}`;
       }
     </script>
   </body>
