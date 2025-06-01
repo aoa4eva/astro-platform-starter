@@ -1,84 +1,223 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Voice Invoice Generator</title>
-    <style>
-      body {
-        font-family: Arial, sans-serif;
-        padding: 20px;
-      }
-      h1 {
-        font-size: 24px;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 20px;
-      }
-      th, td {
-        border: 1px solid #ccc;
-        padding: 8px;
-        text-align: left;
-      }
-      th {
-        background-color: #f0f0f0;
-      }
-      button {
-        padding: 10px 15px;
-        font-size: 16px;
-        margin-top: 10px;
-      }
-    </style>
-  </head>
-  <body>
-    <h1>Invoice Generator</h1>
-    <p>Click the button and say each item like: <i>"Drywall installation 300"</i></p>
-    <button onclick="recordAndTranscribe()">+ New Item (Voice)</button>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice‑Powered Invoice Generator</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- shadcn/ui base styles (via @shadcn/ui preset) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@shadcn/ui@latest/dist/shadcn-ui.min.css" />
+  <!-- whisper.js (WASM build that wraps whisper.cpp). This CDN serves the JS loader + models. -->
+  <script src="https://cdn.jsdelivr.net/npm/whisper-wasm@latest/dist/whisper.js"></script>
+</head>
+<body class="bg-gray-100 text-gray-900 min-h-screen flex flex-col items-center py-10">
+  <header class="mb-8 text-center">
+    <h1 class="text-4xl font-bold mb-2">Voice‑Powered Invoice Generator</h1>
+    <p class="text-sm text-gray-600">Click <strong>New Item</strong>, speak the item and price (e.g., "Painting the living room two hundred dollars"), and we'll build your invoice.</p>
+  </header>
 
-    <table id="invoiceTable">
-      <thead>
+  <main class="w-full max-w-3xl bg-white shadow-xl rounded-2xl p-6 space-y-6">
+    <!-- Button row -->
+    <div class="flex justify-between items-center">
+      <button id="newItemBtn" class="btn btn-primary px-4 py-2 rounded-xl shadow active:scale-95 transition">New Item (Hold to Record)</button>
+      <button id="generateBtn" class="btn btn-secondary px-4 py-2 rounded-xl shadow active:scale-95 transition">Generate Invoice</button>
+    </div>
+
+    <!-- Table for live items -->
+    <div id="itemsContainer" class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-gray-200">
+        <thead>
+          <tr>
+            <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">#</th>
+            <th class="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Description</th>
+            <th class="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Price ($)</th>
+          </tr>
+        </thead>
+        <tbody id="itemsBody" class="bg-white divide-y divide-gray-200"></tbody>
+      </table>
+    </div>
+
+    <div class="flex justify-end text-xl font-semibold">
+      <span>Subtotal:&nbsp;$<span id="subtotal">0.00</span></span>
+    </div>
+  </main>
+
+  <!-- Printable invoice template (hidden until generated) -->
+  <template id="invoiceTemplate">
+    <div class="invoice bg-white p-8 rounded-2xl shadow-xl max-w-3xl mx-auto">
+      <div class="flex justify-between mb-8">
+        <div>
+          <h2 class="text-3xl font-bold">Invoice</h2>
+          <p class="text-sm text-gray-600" id="invoiceDate"></p>
+        </div>
+        <div class="text-right">
+          <p class="font-semibold">Invoice #<span id="invoiceNumber"></span></p>
+        </div>
+      </div>
+      <table class="w-full divide-y divide-gray-200 mb-4">
+        <thead>
+          <tr>
+            <th class="text-left py-2">#</th>
+            <th class="text-left py-2">Description</th>
+            <th class="text-right py-2">Price ($)</th>
+          </tr>
+        </thead>
+        <tbody id="invoiceItems" class="divide-y divide-gray-100"></tbody>
+      </table>
+      <div class="text-right text-xl font-semibold">
+        Total: $<span id="invoiceTotal"></span>
+      </div>
+    </div>
+  </template>
+
+  <!-- Audio element hidden (debug) -->
+  <audio id="debugAudio" controls class="hidden"></audio>
+
+<script>
+  // ===== Speech → Text via whisper.js =====
+  let whisper;
+  const loadModel = async () => {
+    whisper = await Whisper({
+      lang: 'en',
+      modelName: 'ggml-base.en', // Loads ggml-base.en.bin by default
+      progressCallback(p) {
+        console.log('Model load progress', p);
+      }
+    });
+  };
+  loadModel();
+
+  // Utils
+  const $ = (sel) => document.querySelector(sel);
+  const formatMoney = (n) => Number(n).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+
+  const items = [];
+  const refreshTable = () => {
+    const body = $('#itemsBody');
+    body.innerHTML = '';
+    items.forEach((item, idx) => {
+      body.insertAdjacentHTML('beforeend', `
         <tr>
-          <th>#</th>
-          <th>Description</th>
-          <th>Amount ($)</th>
+          <td class="px-4 py-2">${idx + 1}</td>
+          <td class="px-4 py-2">${item.desc}</td>
+          <td class="px-4 py-2 text-right">${formatMoney(item.price)}</td>
         </tr>
-      </thead>
-      <tbody></tbody>
-      <tfoot>
-        <tr>
-          <td colspan="2"><strong>Total</strong></td>
-          <td id="total">$0</td>
-        </tr>
-      </tfoot>
-    </table>
+      `);
+    });
+    const subtotal = items.reduce((sum, item) => sum + item.price, 0);
+    $('#subtotal').textContent = formatMoney(subtotal);
+  };
 
-    <!-- Whisper.js -->
-    <script type="module">
-      import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0';
-
-      let transcriber;
-      let itemCount = 0;
-      let total = 0;
-
-      async function loadModel() {
-        if (!transcriber) {
-          transcriber = await pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
+  // Extract description & price from transcribed sentence
+  const parseLineItem = (text) => {
+    // Find last number (supports "two hundred fifty" words via naive replace or digits)
+    // First try digits
+    const digitMatch = text.match(/(\d+[\.,]?\d*)\s*(dollars|bucks|usd|$)/i);
+    if (digitMatch) {
+      const price = parseFloat(digitMatch[1].replace(/,/g, ''));
+      const desc = text.replace(digitMatch[0], '').trim();
+      return {desc: desc || 'Item', price};
+    }
+    // Simple word‑to‑number map (one‑hundred‑twenty etc. → 120)
+    const wordNums = {
+      zero:0, one:1, two:2, three:3, four:4, five:5, six:6, seven:7, eight:8, nine:9, ten:10,
+      eleven:11, twelve:12, thirteen:13, fourteen:14, fifteen:15, sixteen:16, seventeen:17, eighteen:18, nineteen:19, twenty:20,
+      thirty:30, forty:40, fifty:50, sixty:60, seventy:70, eighty:80, ninety:90, hundred:100, thousand:1000
+    };
+    const words = text.toLowerCase().split(/\s+/);
+    let numberWords = [];
+    for (let i = words.length - 1; i >= 0; i--) {
+      if (wordNums[words[i]] !== undefined || words[i] === 'and') {
+        numberWords.unshift(words[i]);
+      } else {
+        break;
+      }
+    }
+    const number = numberWords.join(' ');
+    // naive conversion (only handles up to 9999)
+    let price = 0;
+    if (number) {
+      let temp = 0;
+      numberWords.forEach(w => {
+        if (wordNums[w] >= 100) {
+          temp *= wordNums[w];
+        } else if (wordNums[w] !== undefined) {
+          temp += wordNums[w];
         }
+      });
+      price = temp;
+    }
+    const desc = text.replace(new RegExp(number + '[\s\S]*$','i'), '').trim();
+    return {desc: desc || 'Item', price};
+  };
+
+  // Record audio & transcribe when holding New Item
+  const newItemBtn = $('#newItemBtn');
+  let mediaRecorder, chunks = [];
+  newItemBtn.addEventListener('mousedown', async () => {
+    chunks = [];
+    if (!navigator.mediaDevices) {
+      alert('Your browser does not support audio capture.');
+      return;
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.start();
+    mediaRecorder.ondataavailable = e => chunks.push(e.data);
+    newItemBtn.textContent = 'Release to Stop';
+  });
+
+  const stopRecording = async () => {
+    if (!mediaRecorder) return;
+    mediaRecorder.stop();
+    mediaRecorder.onstop = async () => {
+      const blob = new Blob(chunks, { type: 'audio/webm' });
+      $('#debugAudio').src = URL.createObjectURL(blob); // optional playback
+      const arrayBuffer = await blob.arrayBuffer();
+      const audioData = new Float32Array(arrayBuffer);
+      // Transcribe via whisper.js
+      const {text} = await whisper.transcribe(audioData, {beam_size:5, best_of:5});
+      console.log('Transcribed:', text);
+      const {desc, price} = parseLineItem(text);
+      if (price === 0) {
+        alert('Couldn\'t detect a price in your speech. Please try again.');
+        return;
       }
+      items.push({desc, price});
+      refreshTable();
+    };
+    newItemBtn.textContent = 'New Item (Hold to Record)';
+  };
+  newItemBtn.addEventListener('mouseup', stopRecording);
+  newItemBtn.addEventListener('mouseleave', stopRecording);
 
-      async function recordAndTranscribe() {
-        await loadModel();
+  // Generate printable invoice
+  $('#generateBtn').addEventListener('click', () => {
+    if (!items.length) return alert('Add at least one item first.');
+    const tpl = document.importNode($('#invoiceTemplate').content, true);
+    tpl.querySelector('#invoiceDate').textContent = new Date().toLocaleDateString();
+    tpl.querySelector('#invoiceNumber').textContent = Math.floor(Math.random()*90000 + 10000);
+    const tbody = tpl.querySelector('#invoiceItems');
+    items.forEach((it, idx) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="py-1 pr-3">${idx+1}</td>
+        <td class="py-1 pr-3">${it.desc}</td>
+        <td class="py-1 text-right">${formatMoney(it.price)}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+    const total = items.reduce((s,i)=>s+i.price,0);
+    tpl.querySelector('#invoiceTotal').textContent = formatMoney(total);
 
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream);
-        const audioChunks = [];
-
-        mediaRecorder.ondataavailable = event => {
-          if (event.data.size > 0) audioChunks.push(event.data);
-        };
-
-        mediaRecorder.onstop = async () => {
-          const blob = new Blob(audioChunks);
-          const arrayBuffer = await blob.arrayBuffer();
-          const result = await transcriber(ar
+    const win = window.open('', '_blank');
+    win.document.write('<html><head><title>Invoice</title><link href="https://cdn.tailwindcss.com" rel="stylesheet"></head><body class="bg-gray-100 p-10">');
+    win.document.body.appendChild(tpl);
+    win.document.write('</body></html>');
+    win.document.close();
+    setTimeout(()=>win.print(), 500);
+  });
+</script>
+</body>
+</html>
