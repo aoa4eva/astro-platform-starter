@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Invoice Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50, #3498db);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            padding: 30px;
+        }
+
+        .input-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+        }
+
+        .invoice-section {
+            background: white;
+            border: 2px solid #dee2e6;
+            border-radius: 10px;
+            padding: 25px;
+        }
+
+        .section-title {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+
+        .voice-instructions {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin-bottom: 25px;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .voice-instructions p {
+            margin: 0;
+            color: #1565c0;
+            font-weight: 500;
+        }
+
+        .voice-instructions code {
+            background: rgba(33, 150, 243, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .voice-controls {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 200px;
+            justify-content: center;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3498db, #2980b9);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #27ae60, #229954);
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            color: white;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn.listening {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+        }
+
+        .status-display {
+            background: white;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 25px;
+            min-height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            color: #6c757d;
+        }
+
+        .status-display.listening {
+            border-color: #e74c3c;
+            background: linear-gradient(135deg, #fff5f5, #ffeaea);
+            color: #c0392b;
+            font-weight: 600;
+        }
+
+        .status-display.processing {
+            border-color: #f39c12;
+            background: linear-gradient(135deg, #fffbf0, #fef5e7);
+            color: #d68910;
+            font-weight: 600;
+        }
+
+        .line-items {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            border: 2px solid #dee2e6;
+        }
+
+        .line-items h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+
+        .line-item {
+            display: grid;
+            grid-template-columns: auto 2fr 1fr auto;
+            gap: 15px;
+            align-items: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #3498db;
+            transition: all 0.3s ease;
+        }
+
+        .line-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+
+        .item-number {
+            font-weight: bold;
+            color: #3498db;
+            font-size: 1.1rem;
+            width: 30px;
+        }
+
+        .item-description {
+            color: #2c3e50;
+            font-weight: 500;
+        }
+
+        .item-price {
+            font-weight: 600;
+            color: #27ae60;
+            text-align: right;
+        }
+
+        .remove-item {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+
+        .remove-item:hover {
+            background: #c0392b;
+            transform: scale(1.1);
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #6c757d;
+            font-style: italic;
+            padding: 30px;
+        }
+
+        .invoice-preview {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 30px;
+            background: white;
+            font-family: 'Times New Roman', serif;
+        }
+
+        .invoice-header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #2c3e50;
+            padding-bottom: 20px;
+        }
+
+        .invoice-title {
+            font-size: 2rem;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .invoice-meta {
+            color: #6c757d;
+            font-size: 1rem;
+        }
+
+        .invoice-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .detail-group h4 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .invoice-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+
+        .invoice-table th,
+        .invoice-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        .invoice-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        .invoice-table .text-right {
+            text-align: right;
+        }
+
+        .invoice-table .text-center {
+            text-align: center;
+        }
+
+        .invoice-total {
+            text-align: right;
+            margin-top: 20px;
+        }
+
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 0;
+            border-top: 2px solid #2c3e50;
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .total-amount {
+            color: #27ae60;
+        }
+
+        .browser-support-warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                gap: 20px;
+                padding: 20px;
+            }
+            
+            .line-item {
+                grid-template-columns: auto 1fr auto;
+                gap: 10px;
+            }
+            
+            .item-price {
+                grid-column: 2 / 3;
+                text-align: left;
+                margin-top: 5px;
+            }
+            
+            .invoice-details {
+                grid-template-columns: 1fr;
+            }
+
+            .btn {
+                min-width: auto;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎙️ Voice Invoice Generator</h1>
+            <p>Create professional invoices using voice input</p>
+        </div>
+
+        <div class="main-content">
+            <div class="input-section">
+                <h2 class="section-title">Voice Input</h2>
+                
+                <div class="browser-support-warning" id="browserWarning">
+                    ⚠️ Speech recognition requires Google Chrome or Edge browser for best results.
+                </div>
+
+                <div class="voice-instructions">
+                    <p>Click the button and speak clearly:</p>
+                    <p><code>"Kitchen cabinet installation 1200"</code></p>
+                    <p><code>"Plumbing repair 350"</code></p>
+                </div>
+
+                <div class="voice-controls">
+                    <button class="btn btn-primary" id="newItemBtn">
+                        🎤 <span id="btnText">New Item (Voice)</span>
+                    </button>
+                </div>
+
+                <div class="status-display" id="statusDisplay">
+                    Click "New Item" to start voice recognition
+                </div>
+
+                <div class="line-items">
+                    <h3>Line Items (<span id="itemCount">0</span>)</h3>
+                    <div id="lineItemsList">
+                        <div class="empty-state">
+                            No items added yet. Use voice input to add your first item!
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="invoice-section">
+                <h2 class="section-title">Invoice Preview</h2>
+                
+                <div class="invoice-preview">
+                    <div class="invoice-header">
+                        <h1 class="invoice-title">INVOICE</h1>
+                        <div class="invoice-meta">
+                            <p>Invoice #: <span id="invoiceNumber">INV-001</span></p>
+                            <p>Date: <span id="invoiceDate"></span></p>
+                        </div>
+                    </div>
+
+                    <div class="invoice-details">
+                        <div class="detail-group">
+                            <h4>From:</h4>
+                            <p><strong>Your Company Name</strong><br>
+                            123 Business Street<br>
+                            City, State 12345<br>
+                            Phone: (555) 123-4567<br>
+                            Email: info@yourcompany.com</p>
+                        </div>
+                        <div class="detail-group">
+                            <h4>To:</h4>
+                            <p><strong>Client Name</strong><br>
+                            Client Address<br>
+                            City, State 12345<br>
+                            Phone: (555) 987-6543</p>
+                        </div>
+                    </div>
+
+                    <table class="invoice-table">
+                        <thead>
+                            <tr>
+                                <th class="text-center">#</th>
+                                <th>Description</th>
+                                <th class="text-right">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoiceTableBody">
+                            <tr>
+                                <td colspan="3" style="text-align: center; color: #6c757d; font-style: italic; padding: 30px;">
+                                    No items added yet
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div class="invoice-total">
+                        <div class="total-row">
+                            <span>Total:</span>
+                            <span class="total-amount" id="invoiceTotal">$0.00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="btn btn-success" style="width: 100%; margin-top: 20px;" onclick="printInvoice()">
+                    🖨️ Print Invoice
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class VoiceInvoiceGenerator {
+            constructor() {
+                this.items = [];
+                this.itemCounter = 0;
+                this.total = 0;
+                this.isListening = false;
+                
+                this.initializeElements();
+                this.updateInvoiceDate();
+                this.checkBrowserSupport();
+            }
+
+            initializeElements() {
+                this.newItemBtn = document.getElementById('newItemBtn');
+                this.btnText = document.getElementById('btnText');
+                this.statusDisplay = document.getElementById('statusDisplay');
+                this.lineItemsList = document.getElementById('lineItemsList');
+                this.itemCount = document.getElementById('itemCount');
+                this.invoiceTableBody = document.getElementById('invoiceTableBody');
+                this.invoiceTotal = document.getElementById('invoiceTotal');
+                this.browserWarning = document.getElementById('browserWarning');
+                
+                // Add event listener for the button
+                this.newItemBtn.addEventListener('click', () => this.startVoiceRecognition());
+            }
+
+            checkBrowserSupport() {
+                if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                    this.browserWarning.style.display = 'block';
+                    this.newItemBtn.disabled = true;
+                    this.statusDisplay.textContent = 'Speech recognition not supported in this browser';
+                    this.statusDisplay.style.color = '#dc3545';
+                }
+            }
+
+            startVoiceRecognition() {
+                if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                    alert('Speech recognition not supported. Please use Google Chrome or Microsoft Edge.');
+                    return;
+                }
+
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                const recognition = new SpeechRecognition();
+                
+                recognition.lang = 'en-US';
+                recognition.interimResults = false;
+                recognition.maxAlternatives = 1;
+                recognition.continuous = false;
+
+                // Update UI to show listening state
+                this.setListeningState(true);
+
+                recognition.onstart = () => {
+                    this.statusDisplay.textContent = '🎤 Listening... Speak now!';
+                    this.statusDisplay.className = 'status-display listening';
+                };
+
+                recognition.onresult = (event) => {
+                    const transcript = event.results[0][0].transcript.trim();
+                    this.statusDisplay.textContent = `Processing: "${transcript}"`;
+                    this.statusDisplay.className = 'status-display processing';
+                    
+                    setTimeout(() => {
+                        const { description, amount } = this.parseVoiceInput(transcript);
+                        if (description && amount) {
+                            this.addItem(description, amount);
+                            this.statusDisplay.textContent = `✅ Added: ${description} - $${amount.toFixed(2)}`;
+                            this.statusDisplay.className = 'status-display';
+                        } else {
+                            this.statusDisplay.textContent = '❌ Could not parse. Try: "Kitchen cabinets 1200"';
+                            this.statusDisplay.className = 'status-display';
+                        }
+                        
+                        // Reset status after 3 seconds
+                        setTimeout(() => {
+                            this.statusDisplay.textContent = 'Click "New Item" to add another item';
+                            this.statusDisplay.className = 'status-display';
+                        }, 3000);
+                    }, 500);
+                };
+
+                recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                    this.statusDisplay.textContent = `❌ Error: ${event.error}. Please try again.`;
+                    this.statusDisplay.className = 'status-display';
+                    this.setListeningState(false);
+                };
+
+                recognition.onend = () => {
+                    this.setListeningState(false);
+                };
+
+                try {
+                    recognition.start();
+                } catch (error) {
+                    console.error('Error starting recognition:', error);
+                    alert('Error starting voice recognition. Please try again.');
+                    this.setListeningState(false);
+                }
+            }
+
+            setListeningState(listening) {
+                this.isListening = listening;
+                if (listening) {
+                    this.newItemBtn.classList.add('listening');
+                    this.btnText.textContent = 'Listening...';
+                    this.newItemBtn.disabled = true;
+                } else {
+                    this.newItemBtn.classList.remove('listening');
+                    this.btnText.textContent = 'New Item (Voice)';
+                    this.newItemBtn.disabled = false;
+                }
+            }
+
+            parseVoiceInput(text) {
+                // Clean up the text
+                const cleanText = text.toLowerCase().trim();
+                
+                // Try multiple parsing patterns
+                const patterns = [
+                    // "description amount" - e.g., "kitchen cabinets 1200"
+                    /^(.+?)\s+(\d+(?:\.\d{1,2})?)$/,
+                    // "description for amount" - e.g., "kitchen cabinets for 1200"
+                    /^(.+?)\s+for\s+(\d+(?:\.\d{1,2})?)$/,
+                    // "description dollar amount" - e.g., "kitchen cabinets dollar 1200"
+                    /^(.+?)\s+(?:dollar|dollars?)\s*(\d+(?:\.\d{1,2})?)$/,
+                    // "description costing amount" - e.g., "kitchen cabinets costing 1200"
+                    /^(.+?)\s+(?:costing|costs?)\s+(\d+(?:\.\d{1,2})?)$/
+                ];
+
+                for (const pattern of patterns) {
+                    const match = cleanText.match(pattern);
+                    if (match) {
+                        return {
+                            description: this.capitalizeWords(match[1].trim()),
+                            amount: parseFloat(match[2])
+                        };
+                    }
+                }
+
+                // If no pattern matches, return empty
+                return { description: '', amount: 0 };
+            }
+
+            capitalizeWords(str) {
+                return str.replace(/\b\w/g, l => l.toUpperCase());
+            }
+
+            addItem(description, amount) {
+                this.itemCounter++;
+                const item = {
+                    id: Date.now(),
+                    number: this.itemCounter,
+                    description,
+                    amount: parseFloat(amount.toFixed(2))
+                };
+                
+                this.items.push(item);
+                this.total += item.amount;
+                
+                this.renderLineItems();
+                this.updateInvoice();
+            }
+
+            removeItem(id) {
+                const itemIndex = this.items.findIndex(item => item.id === id);
+                if (itemIndex > -1) {
+                    const item = this.items[itemIndex];
+                    this.total -= item.amount;
+                    this.items.splice(itemIndex, 1);
+                    
+                    this.renderLineItems();
+                    this.updateInvoice();
+                }
+            }
+
+            renderLineItems() {
+                this.itemCount.textContent = this.items.length;
+                
+                if (this.items.length === 0) {
+                    this.lineItemsList.innerHTML = `
+                        <div class="empty-state">
+                            No items added yet. Use voice input to add your first item!
+                        </div>
+                    `;
+                    return;
+                }
+                
+                this.lineItemsList.innerHTML = this.items.map(item => `
+                    <div class="line-item">
+                        <div class="item-number">#${item.number}</div>
+                        <div class="item-description">${item.description}</div>
+                        <div class="item-price">$${item.amount.toFixed(2)}</div>
+                        <button class="remove-item" onclick="invoiceGenerator.removeItem(${item.id})" title="Remove item">
+                            ×
+                        </button>
+                    </div>
+                `).join('');
+            }
+
+            updateInvoice() {
+                const tbody = this.invoiceTableBody;
+                
+                if (this.items.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="3" style="text-align: center; color: #6c757d; font-style: italic; padding: 30px;">
+                                No items added yet
+                            </td>
+                        </tr>
+                    `;
+                    this.invoiceTotal.textContent = '$0.00';
+                    return;
+                }
+                
+                tbody.innerHTML = this.items.map(item => `
+                    <tr>
+                        <td class="text-center">${item.number}</td>
+                        <td>${item.description}</td>
+                        <td class="text-right">$${item.amount.toFixed(2)}</td>
+                    </tr>
+                `).join('');
+                
+                this.invoiceTotal.textContent = `$${this.total.toFixed(2)}`;
+            }
+
+            updateInvoiceDate() {
+                const today = new Date();
+                const dateString = today.toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                });
+                document.getElementById('invoiceDate').textContent = dateString;
+            }
+        }
+
+        // Initialize the application
+        const invoiceGenerator = new VoiceInvoiceGenerator();
+
+        // Print function
+        function printInvoice() {
+            if (invoiceGenerator.items.length === 0) {
+                alert('Please add some items before printing the invoice.');
+                return;
+            }
+
+            // Get the invoice content
+            const invoicePreview = document.querySelector('.invoice-preview');
+            if (!invoicePreview) {
+                alert('Error: Could not find invoice content to print.');
+                return;
+            }
+
+            const printContent = invoicePreview.innerHTML;
+            const invoiceNumber = document.getElementById('invoiceNumber')?.textContent || 'INV-001';
+            
+            // Create print window
+            const printWindow = window.open('', '_blank', 'width=800,height=600');
+            
+            if (!printWindow) {
+                alert('Pop-up blocked! Please allow pop-ups and try again.');
+                return;
+            }
+
+            // Write the HTML content
+            printWindow.document.open();
+            printWindow.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice - ${invoiceNumber}</title>
+    <style>
+        body { 
+            font-family: 'Times New Roman', serif; 
+            margin: 20px; 
+            color: #000;
+            background: white;
+            line-height: 1.4;
+        }
+        table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin: 20px 0;
+        }
+        th, td { 
+            padding: 12px; 
+            text-align: left; 
+            border-bottom: 1px solid #ddd; 
+            border: 1px solid #ddd;
+        }
+        th { 
+            background: #f5f5f5; 
+            font-weight: bold;
+        }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .invoice-header { 
+            text-align: center; 
+            margin-bottom: 30px; 
+            border-bottom: 2px solid #333; 
+            padding-bottom: 20px; 
+        }
+        .invoice-details { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 30px; 
+            margin-bottom: 30px; 
+        }
+        .total-row { 
+            display: flex; 
+            justify-content: space-between; 
+            padding: 15px 0; 
+            border-top: 2px solid #333; 
+            font-weight: bold; 
+            font-size: 1.2em;
+        }
+        .detail-group h4 {
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 1.1em;
+        }
+        .invoice-title {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .invoice-meta {
+            margin-bottom: 10px;
+        }
+        .total-amount {
+            color: #333;
+        }
+        @media print {
+            body { margin: 0; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body>
+    ${printContent}
+    <div style="margin-top: 40px; text-align: center; color: #666; font-size: 0.9em;">
+        Generated by Voice Invoice Generator
+    </div>
+</body>
+</html>`);
+            
+            printWindow.document.close();
+            
+            // Wait for content to load, then print
+            printWindow.onload = function() {
+                setTimeout(() => {
+                    printWindow.focus();
+                    printWindow.print();
+                    // Close the window after printing (optional)
+                    setTimeout(() => {
+                        printWindow.close();
+                    }, 100);
+                }, 250);
+            };
+        }
+    </script>
+</body>
+</html>
